@@ -554,7 +554,7 @@ class MainWindow(QMainWindow):
                 self.imageData = b64decode(data['imageData'])
                 self.lineColor = data['lineColor']
                 self.fillColor = data['fillColor']
-                self.shapestoload = data['polygons']
+                self.shapestoload = data['objects']
                 
         except:
             pass
