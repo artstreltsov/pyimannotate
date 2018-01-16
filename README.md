@@ -22,6 +22,10 @@ pyimannotate is a Python-scripted Qt application tailored for hassle-free annota
 - Ctrl+H: select shape color
 - Ctrl+Q: close the application
 
+
+![alt text](https://raw.githubusercontent.com/astr93/pyimannotate/examples/cameron example.JPG)
+
+
 ### References (related tools that influenced development)
 - https://github.com/wkentaro/labelme
 - https://github.com/tzutalin/labelImg
