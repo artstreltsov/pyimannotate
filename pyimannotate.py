@@ -1,7 +1,8 @@
 from functools import partial
 from base64 import b64encode, b64decode
 import json
-
+import re
+import pandas as pd
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
@@ -59,11 +60,25 @@ class Annotationscene(object):
         self.fillColor=None
         self.lineColor=None
         self.imsizes=None
+    
+    def shapes_to_pandas(self):
+        imsize, objects = self.imsizes, self.shapes
+        df=pd.DataFrame(columns=['width', 'height', 'Object', 'X', 'Y'])
+        for i, obj in enumerate(objects):
+            X, Y=list(zip(*obj))
+            l=len(X)
+            width=[imsize[0] for j in range(l)]
+            height=[imsize[1] for j in range(l)]
+            obj_number=[i+1 for j in range(l)]
+            df=df.append(pd.DataFrame({'width': width, 'height': height, 'Object': obj_number, 'X': X, 'Y': Y}), ignore_index=True)
+        return df
 
     def save(self):
 
         self.imData = b64encode(self.imageData).decode('utf-8')
         self.shapes=[[(point.x(), point.y()) for point in poly] for poly in self.polygons]
+        self.shapes_to_pandas().to_csv(re.search(re.compile('(.+?)(\.[^.]*$|$)'), self.filename).group(1)+'.csv', sep=',')
+
         try:
             with open(self.filename, 'w') as f:
 
@@ -79,21 +94,13 @@ class Annotationscene(object):
             pass
 
  
-DEFAULT_LINE_COLOR = QColor(0, 255, 0, 128)
-DEFAULT_FILL_COLOR = QColor(255, 0, 128)
-DEFAULT_SELECT_LINE_COLOR = QColor(255, 255, 255)
-DEFAULT_SELECT_FILL_COLOR = QColor(0, 128, 255, 155)
-DEFAULT_VERTEX_FILL_COLOR = QColor(0, 255, 0, 255)
-DEFAULT_HVERTEX_FILL_COLOR = QColor(255, 0, 0)
 
 class Shape(QGraphicsItem):
 
-    line_color = DEFAULT_LINE_COLOR
-    fill_color = DEFAULT_FILL_COLOR
-    select_line_color = DEFAULT_SELECT_LINE_COLOR
-    select_fill_color = DEFAULT_SELECT_FILL_COLOR
-    vertex_fill_color = DEFAULT_VERTEX_FILL_COLOR
-    hvertex_fill_color = DEFAULT_HVERTEX_FILL_COLOR
+    line_color = QColor(0, 6, 255)
+    select_line_color = QColor(255, 255, 255)
+    vertex_fill_color = QColor(0, 255, 0, 255)
+    hvertex_fill_color = QColor(255, 0, 0)
     point_size = 4
     hsize=8.0
 
@@ -106,13 +113,13 @@ class Shape(QGraphicsItem):
         self.setFlag(QGraphicsItem.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
         self.closed = False
+        self.points_adjusted=None
 
         if line_color is not None:
             self.line_color = line_color
 
         if point_size is not None:
             self.point_size = point_size
-
 
     def addPoint(self, point):
         self.setSelected(True)
@@ -129,10 +136,10 @@ class Shape(QGraphicsItem):
     def paint(self, painter, option, widget):
 
         if self.points:
+            self.prepareGeometryChange()
             color = self.select_line_color if self.selected else self.line_color
             pen = QPen(color)
             pen.setWidth(self.point_size/2)
-            colorn=QColor(255,0,255)
             painter.setPen(pen)
             path=self.shape()
             if self.closed == True:
@@ -153,12 +160,12 @@ class Shape(QGraphicsItem):
             self.vertex_fill_color = self.hvertex_fill_color
         else:
             self.vertex_fill_color = Shape.vertex_fill_color
-        path.addEllipse(self.points[index], psize, psize)
+        path.addEllipse(self.mapFromScene(self.points[index]), psize, psize)
  
 
     def shape(self):
         path = QPainterPath()
-        polygon=QPolygonF(self.points)
+        polygon=self.mapFromScene(QPolygonF(self.points))
         path.addPolygon(polygon)
         return path
 
@@ -169,6 +176,7 @@ class Shape(QGraphicsItem):
         return self.shape().boundingRect()
 
     def moveBy(self, tomove, delta):
+        print('HERE')
         if tomove=='all':
             tomove=slice(0,len(self.points))
         else:
@@ -209,8 +217,8 @@ class SubQGraphicsScene(QGraphicsScene):
         self.polys=[]
         self._cursor = CURSOR_DEFAULT
         self.line=None
-        self.lineColor=QColor(0,0,255)
-        self.shapeColor=QColor(255,0,255)
+        self.lineColor=QColor(3,252,66)
+        self.shapeColor=QColor(0, 6, 255)
         self.selectedVertex=None
         self.selectedShape=None
         self.polystatus=self.POLYDRAWING
@@ -258,11 +266,12 @@ class SubQGraphicsScene(QGraphicsScene):
             #update the tail of the pointing line
             if self.line and self.polygon_not_finished():
                 self.line.points[0]=pos
-
+                self.line.setPos(pos)
             #initialize a pointing line for a new polygon
             elif self.line==None or self.polygonfinished():
                 self.line=Shape()
                 self.addItem(self.line)
+                self.line.setPos(pos)
                 self.line.addPoint(pos)
 
             if self.QGitem:
@@ -281,8 +290,11 @@ class SubQGraphicsScene(QGraphicsScene):
             else:
                 self.polystatus=self.POLYDRAWING
                 self.QGitem=Shape()
+
                 self.addItem(self.QGitem)
+                self.QGitem.setPos(pos)
                 self.QGitem.addPoint(pos)
+                self.QGitem.setZValue(len(self.polys)+1)
             self.update()
 
         elif self.moving() & (event.button() == Qt.LeftButton):
@@ -292,7 +304,6 @@ class SubQGraphicsScene(QGraphicsScene):
             self.update()
 
         elif self.navigating():
-            #event.accept()
             self.update()
         #event.accept()
 
@@ -304,6 +315,7 @@ class SubQGraphicsScene(QGraphicsScene):
             self.overrideCursor(CURSOR_DRAW)
 
             if self.QGitem:
+
                 if len(self.QGitem.points)==1:  #initialize the pointing line collapsed to a point
                     self.line.points=[self.QGitem.points[0], self.QGitem.points[0]]
                 colorLine = self.lineColor
@@ -344,7 +356,7 @@ class SubQGraphicsScene(QGraphicsScene):
         id_shape=[i for i, y in enumerate(id_point) if y != []]
 
         itemUnderMouse=self.itemAt(pos, QTransform())
-
+        
         #if shape/vertix combination found, highlight vertex and shape
         if id_shape != []:
             self.selectedVertex=id_point[id_shape[0]][0]
@@ -488,6 +500,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.viewer)
         self.annotationscene=Annotationscene()
         self.shapestoload=None
+        self.imname=None
 
         action = partial(newAction, self)
         quit = action('&Quit', self.close, 'Ctrl+Q', 'quit', 'Quit application')
@@ -498,12 +511,13 @@ class MainWindow(QMainWindow):
         shapecolorselect = action('&Select shape color', self.setShapeColor, 'Ctrl+H')
         menubar = self.menuBar()
         fileMenu = menubar.addMenu('File')
-        self.actions_to_menus(fileMenu, [openshort, save, quit, linecolorselect, shapecolorselect])
+        self.actions_to_menus(fileMenu, [openshort, save, linecolorselect, shapecolorselect, quit])
 
     def saver(self):
         dialogue=QFileDialog()
-        dialogue.setNameFilter("*.json");
+        dialogue.setNameFilter("*.json")
         dialogue.setDefaultSuffix('json')
+        dialogue.selectFile(self.imname)
         dialogue.exec()
         savepath=dialogue.selectedFiles()[0]
         return self.saveFile(filename=savepath, polygons=self.viewer.scene.polys)
@@ -531,6 +545,8 @@ class MainWindow(QMainWindow):
             self, 'Choose Image')
         if path:
             imagePath=path[0]
+            self.imname=re.search(re.compile('^(.+\/)*(.+)\.(.+)$'), imagePath).group(2)
+           
             if path[0].endswith('.json'):
                 self.loadjson(path[0])
             else:
@@ -591,8 +607,8 @@ if __name__ == '__main__':
     window = MainWindow()
     #window.setWindowState(Qt.WindowFullScreen)
     screenGeometry = QApplication.desktop().screenGeometry()
-    x = (screenGeometry.width()-2400) / 2;
-    y = (screenGeometry.height()-1800) / 2;
-    window.setGeometry(QRect(x, y, 2400, 1800))
+    x = screenGeometry.width()
+    y = screenGeometry.height()
+    window.setGeometry(QRect(x/10, y/10, x/1.2, y/1.2))
     window.show()
     sys.exit(app.exec_())
