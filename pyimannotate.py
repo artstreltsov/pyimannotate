@@ -176,7 +176,6 @@ class Shape(QGraphicsItem):
         return self.shape().boundingRect()
 
     def moveBy(self, tomove, delta):
-        print('HERE')
         if tomove=='all':
             tomove=slice(0,len(self.points))
         else:
