@@ -3,6 +3,7 @@ from base64 import b64encode, b64decode
 import json
 import re
 import pandas as pd
+import os
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
@@ -276,7 +277,7 @@ class SubQGraphicsScene(QGraphicsScene):
             if self.QGitem:
                 #attract the cursor to the start point of the polygon and close it
                 if len(self.QGitem.points) > 1 and self.closeEnough(pos, self.QGitem.points[0]):
-#color = self.QGitem.line_color
+
                     pos = self.QGitem.points[0]
                     self.overrideCursor(CURSOR_POINT)
                     self.QGitem.highlightVertex(0)
@@ -284,7 +285,7 @@ class SubQGraphicsScene(QGraphicsScene):
                 self.QGitem.addPoint(pos)
                 if (self.QGitem.points[0]==pos):
                     self.finalisepoly()
-              #      self.update()
+
 
             else:
                 self.polystatus=self.POLYDRAWING
@@ -500,6 +501,21 @@ class MainWindow(QMainWindow):
         self.annotationscene=Annotationscene()
         self.shapestoload=None
         self.imname=None
+        self.imlist=[]
+        self.currentPath=None
+
+        self.fileListWidget = QListWidget()
+        self.fileListWidget.itemDoubleClicked.connect(self.imagenameDoubleClicked)
+        filelistLayout = QVBoxLayout()
+        filelistLayout.setContentsMargins(0, 0, 0, 0)
+        filelistLayout.addWidget(self.fileListWidget)
+        fileListContainer = QWidget()
+        fileListContainer.setLayout(filelistLayout)
+        self.filedock = QDockWidget(u'Image List', self)
+        self.filedock.setObjectName(u'Images')
+        self.filedock.setWidget(fileListContainer)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.filedock)
+
 
         action = partial(newAction, self)
         quit = action('&Quit', self.close, 'Ctrl+Q', 'quit', 'Quit application')
@@ -511,6 +527,9 @@ class MainWindow(QMainWindow):
         menubar = self.menuBar()
         fileMenu = menubar.addMenu('File')
         self.actions_to_menus(fileMenu, [openshort, save, linecolorselect, shapecolorselect, quit])
+
+    def imagenameDoubleClicked(self, item=None):
+    	return self.handleOpen(self.currentPath+item.text())
 
     def saver(self):
         dialogue=QFileDialog()
@@ -538,22 +557,33 @@ class MainWindow(QMainWindow):
             menu.addAction(x)
         return
 
-    def handleOpen(self):
-        self.resetState()
-        path = QFileDialog.getOpenFileName(
-            self, 'Choose Image')
-        if path:
-            imagePath=path[0]
-            self.imname=re.search(re.compile('^(.+\/)*(.+)\.(.+)$'), imagePath).group(2)
-           
-            if path[0].endswith('.json'):
-                self.loadjson(path[0])
-            else:
-                self.imageData = process(path[0], None)
+    def imageIdentifier(self, path):
+        exts=['png', 'jpeg', 'tif', 'tiff', 'bmp', 'json', 'jpg']
+        files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and f.split(".")[-1] in exts]
+        return files
 
-            image = QImage.fromData(self.imageData)
-            self.imsizes=(image.size().width(), image.size().height())
-            self.viewer.setPhoto(QPixmap.fromImage(image))
+    def handleOpen(self, path=None):
+        self.resetState()
+        if not path:
+	        path = QFileDialog.getOpenFileName(
+	            self, 'Choose Image')[0]
+        
+        imagePath=path
+        path_decomposed=re.search(re.compile('^(.+\/)*(.+)\.(.+)$'), imagePath)
+        self.imname=path_decomposed.group(2)
+        self.currentPath=path_decomposed.group(1)
+        self.imlist = self.imageIdentifier(self.currentPath)
+        self.fileListWidget.clear()
+        [self.fileListWidget.addItem(im) for im in self.imlist]
+
+        if path.endswith('.json'):
+            self.loadjson(path)
+        else:
+            self.imageData = process(path, None)
+
+        image = QImage.fromData(self.imageData)
+        self.imsizes=(image.size().width(), image.size().height())
+        self.viewer.setPhoto(QPixmap.fromImage(image))
 
         self.loadShapes(self.shapestoload)
         self.annotationscene.imagePath=self.imagePath
