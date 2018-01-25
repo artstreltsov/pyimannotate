@@ -19,6 +19,17 @@ from PyQt5.QtWidgets import *
 #         b.clicked.connect(slot)
 #     return b
 
+
+class ToolButton(QToolButton):
+    """ToolBar companion class which ensures all buttons have the same size."""
+    minSize = (100, 100)
+    def minimumSizeHint(self):
+        ms = super(ToolButton, self).minimumSizeHint()
+        w1, h1 = ms.width(), ms.height()
+        w2, h2 = self.minSize
+        ToolButton.minSize = max(w1, w2), max(h1, h2)
+        return QSize(*ToolButton.minSize)
+
 def process(filename, default=None):
     try:
         with open(filename, 'rb') as f:
@@ -61,17 +72,14 @@ class Annotationscene(object):
         self.fillColor=None
         self.lineColor=None
         self.imsizes=None
+        self.object_types=None
     
     def shapes_to_pandas(self):
-        imsize, objects = self.imsizes, self.shapes
+        imsize, objects, types = self.imsizes, self.shapes, self.object_types
         df=pd.DataFrame(columns=['width', 'height', 'Object', 'X', 'Y'])
         for i, obj in enumerate(objects):
             X, Y=list(zip(*obj))
-            l=len(X)
-            width=[imsize[0] for j in range(l)]
-            height=[imsize[1] for j in range(l)]
-            obj_number=[i+1 for j in range(l)]
-            df=df.append(pd.DataFrame({'width': width, 'height': height, 'Object': obj_number, 'X': X, 'Y': Y}), ignore_index=True)
+            df=df.append(pd.DataFrame({'width': imsize[0], 'height': imsize[1], 'Object': i+1, 'Type': types[i], 'X': X, 'Y': Y}), ignore_index=True)
         return df
 
     def save(self):
@@ -85,6 +93,7 @@ class Annotationscene(object):
 
                 json.dump({
                     'objects': self.shapes,
+                    'type': self.object_types,
                     'width/height': self.imsizes,
                     'lineColor': self.lineColor,
                     'fillColor': self.fillColor,
@@ -222,7 +231,7 @@ class SubQGraphicsScene(QGraphicsScene):
         self.selectedVertex=None
         self.selectedShape=None
         self.polystatus=self.POLYDRAWING
-
+        self.objtypes=[]
 
     def drawing(self):
         return self.mode == self.DRAWING
@@ -243,26 +252,32 @@ class SubQGraphicsScene(QGraphicsScene):
         return self.selectedVertex is not None
 
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key_E:
-            self.mode=self.DRAWING
-            self.overrideCursor(CURSOR_DRAW)
-            print('Drawing')
-        if event.key() == Qt.Key_N:
-            self.mode=self.NAVIGATION
-            self.overrideCursor(CURSOR_GRAB)
-            print('Navigating')
-        if event.key() == Qt.Key_M:
-            self.mode=self.MOVING
-            print('Moving')
-        if event.key() == Qt.Key_Y:
+        # if event.key() == Qt.Key_E:
+        #     self.mode=self.DRAWING
+        #     self.overrideCursor(CURSOR_DRAW)
+        #     print('Drawing')
+        # if event.key() == Qt.Key_N:
+        #     self.mode=self.NAVIGATION
+        #     self.overrideCursor(CURSOR_GRAB)
+        #     print('Navigating')
+        # if event.key() == Qt.Key_M:
+        #     self.mode=self.MOVING
+        #     print('Moving')
+        if event.key() == Qt.Key_Delete:
             self.deleteSelected()
+        # if event.key() == Qt.Key_C:
+        #     self.triggerClosure()
             
+
+    def triggerClosure(self):
+    	self.finalisepoly(premature=True)
 
     def mousePressEvent(self, event):
         '''Draw or move vertices/shapes'''
         pos = event.scenePos()
 
         if self.drawing() & (event.button() == Qt.LeftButton):
+            self.overrideCursor(CURSOR_DRAW)
             #update the tail of the pointing line
             if self.line and self.polygon_not_finished():
                 self.line.points[0]=pos
@@ -298,12 +313,14 @@ class SubQGraphicsScene(QGraphicsScene):
             self.update()
 
         elif self.moving() & (event.button() == Qt.LeftButton):
+            #self.overrideCursor(CURSOR_GRAB)
             self.selectShapebyPoint(pos)
             self.prevPoint=pos
             event.accept()
             self.update()
 
         elif self.navigating():
+            #self.overrideCursor(CURSOR_GRAB)
             self.update()
         #event.accept()
 
@@ -339,6 +356,7 @@ class SubQGraphicsScene(QGraphicsScene):
 
         #moving shapes/vertices
         if self.moving and Qt.LeftButton & event.buttons():
+            #self.overrideCursor(CURSOR_GRAB)
             if self.vertexSelected():
                 self.moveVertex(pos)
                 self.update()
@@ -389,15 +407,22 @@ class SubQGraphicsScene(QGraphicsScene):
     def closeEnough(self, p1, p2):
         return distance(p1 - p2) < self.epsilon
 
-    def finalisepoly(self):
-        assert self.QGitem
-        if self.line:
-            self.removeItem(self.line)
-            self.line.popPoint()
-        self.polys.append(self.QGitem)
-        self.QGitem = None
-        self.polystatus=self.POLYREADY
-        self.update()
+    def finalisepoly(self, premature=False):
+        if self.QGitem:
+            if premature:
+                if len(self.QGitem.points)==1:
+                    self.objtypes.append('Point')
+                else:
+                    self.objtypes.append('Line')
+            else:
+                self.objtypes.append('Polygon')
+            if self.line:
+                self.removeItem(self.line)
+                self.line.popPoint()
+            self.polys.append(self.QGitem)
+            self.QGitem = None
+            self.polystatus=self.POLYREADY
+            self.update()
 
     def overrideCursor(self, cursor):
         self._cursor = cursor
@@ -407,6 +432,7 @@ class SubQGraphicsScene(QGraphicsScene):
         if self.selectedShape:
             shape = self.items()[:-1][::-1].index(self.selectedShape)
             self.polys.pop(shape)
+            self.objtypes.pop(shape)
             self.removeItem(self.selectedShape)
             self.selectedShape = None
             print('Shape deleted')
@@ -503,6 +529,7 @@ class MainWindow(QMainWindow):
         self.imname=None
         self.imlist=[]
         self.currentPath=None
+        self.object_types=None
 
         self.fileListWidget = QListWidget()
         self.fileListWidget.itemDoubleClicked.connect(self.imagenameDoubleClicked)
@@ -524,9 +551,42 @@ class MainWindow(QMainWindow):
            'Ctrl+S', 'save', 'Save labels to file', enabled=True)
         linecolorselect = action('&Select line color', self.setLineColor, 'Ctrl+G')
         shapecolorselect = action('&Select shape color', self.setShapeColor, 'Ctrl+H')
+        setEditing = action('&Drawing Mode', self.setEditing, 'E', 'Drawing', 'Enable drawing mode')
+        setMoving = action('&Moving Mode', self.setMoving, 'M', 'Moving', 'Enable moving mode')
+        setNavigating = action('&Navigation Mode', self.setNavigating, 'N', 'Navigating', 'Enable navigation mode')
+        setClosed = action('&Annotation complete', self.setClosure, 'C', 'Closing shape', 'Complete current annotation')
+
+     
         menubar = self.menuBar()
         fileMenu = menubar.addMenu('File')
-        self.actions_to_menus(fileMenu, [openshort, save, linecolorselect, shapecolorselect, quit])
+        self.actions_to_menus(fileMenu, [openshort, save, setEditing, setMoving, setNavigating, setClosed, linecolorselect, shapecolorselect, quit])
+        
+        self.toolbar=QToolBar()
+        self.toolbar.clear()
+        [self.addbutton(self.toolbar, action) for action in [openshort, save, setEditing, setMoving, setNavigating, setClosed, linecolorselect, shapecolorselect, quit]]
+        self.addToolBar(Qt.LeftToolBarArea, self.toolbar)
+
+    def addbutton(self, toolbar, action):
+        btn = ToolButton()
+        btn.setDefaultAction(action)
+        btn.setToolButtonStyle(toolbar.toolButtonStyle())
+        toolbar.addWidget(btn)
+        toolbar.addSeparator()
+
+    def setClosure(self):
+        self.viewer.scene.triggerClosure()
+
+    def setEditing(self):
+        self.viewer.scene.mode=self.viewer.scene.DRAWING
+        return
+
+    def setMoving(self):
+        self.viewer.scene.mode=self.viewer.scene.MOVING
+        return
+
+    def setNavigating(self):
+        self.viewer.scene.mode=self.viewer.scene.NAVIGATION
+        return
 
     def imagenameDoubleClicked(self, item=None):
     	return self.handleOpen(self.currentPath+item.text())
@@ -537,8 +597,9 @@ class MainWindow(QMainWindow):
         dialogue.setDefaultSuffix('json')
         dialogue.selectFile(self.imname)
         dialogue.exec()
-        savepath=dialogue.selectedFiles()[0]
-        return self.saveFile(filename=savepath, polygons=self.viewer.scene.polys)
+        savepath=dialogue.selectedFiles()
+        if savepath:
+            return self.saveFile(filename=savepath[0], polygons=self.viewer.scene.polys, object_types=self.viewer.scene.objtypes)
    
     def selectColor(self):
         dialogue=QColorDialog()
@@ -562,34 +623,39 @@ class MainWindow(QMainWindow):
         files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and f.split(".")[-1] in exts]
         return files
 
+    def populateImageList(self):
+        self.imlist = self.imageIdentifier(self.currentPath)
+        self.fileListWidget.clear()
+        [self.fileListWidget.addItem(im) for im in self.imlist]
+        return
+
     def handleOpen(self, path=None):
         self.resetState()
         if not path:
 	        path = QFileDialog.getOpenFileName(
 	            self, 'Choose Image')[0]
         
-        imagePath=path
-        path_decomposed=re.search(re.compile('^(.+\/)*(.+)\.(.+)$'), imagePath)
-        self.imname=path_decomposed.group(2)
-        self.currentPath=path_decomposed.group(1)
-        self.imlist = self.imageIdentifier(self.currentPath)
-        self.fileListWidget.clear()
-        [self.fileListWidget.addItem(im) for im in self.imlist]
+        if path:
+            imagePath=path
+            path_decomposed=re.search(re.compile('^(.+\/)*(.+)\.(.+)$'), imagePath)
+            self.imname=path_decomposed.group(2)
+            self.currentPath=path_decomposed.group(1)
+            self.populateImageList()
 
-        if path.endswith('.json'):
-            self.loadjson(path)
-        else:
-            self.imageData = process(path, None)
+            if path.endswith('.json'):
+                self.loadjson(path)
+            else:
+                self.imageData = process(path, None)
 
-        image = QImage.fromData(self.imageData)
-        self.imsizes=(image.size().width(), image.size().height())
-        self.viewer.setPhoto(QPixmap.fromImage(image))
+            image = QImage.fromData(self.imageData)
+            self.imsizes=(image.size().width(), image.size().height())
+            self.viewer.setPhoto(QPixmap.fromImage(image))
 
-        self.loadShapes(self.shapestoload)
-        self.annotationscene.imagePath=self.imagePath
-        self.annotationscene.imageData=self.imageData
-        self.annotationscene.imsizes=self.imsizes
-        print('LOADED')
+            self.loadShapes(self.shapestoload, self.object_types)
+            self.annotationscene.imagePath=self.imagePath
+            self.annotationscene.imageData=self.imageData
+            self.annotationscene.imsizes=self.imsizes
+            print('LOADED')
 
     def loadjson(self, filename):
         try:
@@ -600,7 +666,8 @@ class MainWindow(QMainWindow):
                 self.lineColor = data['lineColor']
                 self.fillColor = data['fillColor']
                 self.shapestoload = data['objects']
-                
+                self.object_types= data['types']
+
         except:
             pass
 
@@ -608,32 +675,41 @@ class MainWindow(QMainWindow):
         if self.imageData:
             self.imageData=None
             self.shapestoload=None
+            self.object_types=None
             [self.viewer.scene.removeItem(item) for item in self.viewer.scene.items()[:-1]]
             self.viewer.scene.polys=[]
             self.viewer.scene.update()
             self.viewer.viewport().update()
             return
 
-    def loadShapes(self, polygons):
+    def loadShapes(self, polygons, types):
         if self.shapestoload:
-            for ps in polygons:
+            for ps in range(len(polygons)):
                 polygon=Shape()
-                polygon.points=[QPointF(p[0], p[1]) for p in ps]
+                polygon.points=[QPointF(p[0], p[1]) for p in polygons[ps]]
                 polygon.closed=True
                 self.viewer.scene.polys.append(polygon)
+                self.viewer.scene.objtypes.append(types[ps])
                 self.viewer.scene.addItem(polygon)
 
-    def saveFile(self, filename, polygons):
+    def saveFile(self, filename, polygons, object_types):
         self.annotationscene.polygons=polygons
         self.annotationscene.filename=filename
+        self.annotationscene.object_types=object_types
         self.annotationscene.save()
+        self.populateImageList()
         print('SAVED')
+
 
 if __name__ == '__main__':
 
     import sys
     app = QApplication(sys.argv)
+    app.setStyleSheet("QToolButton { background-color: gray; }\n"
+              "QToolButton:pressed { background-color: green; }\n"
+              "QToolButton:hover { color: white }\n");
     window = MainWindow()
+    window.setWindowTitle('pyimannotate')
     #window.setWindowState(Qt.WindowFullScreen)
     screenGeometry = QApplication.desktop().screenGeometry()
     x = screenGeometry.width()
