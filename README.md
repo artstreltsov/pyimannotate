@@ -6,9 +6,6 @@ pyimannotate is a Python-scripted Qt application tailored for hassle-free annota
 
  ** Note: Readme and the annotation tool itself are still under construction **
  
- 
- ** This is a beta version of the application **
-
 ### Dependencies (Tested Version in Parenthesis):
 - Python 3.x (3.6)
 - PyQt5 (5.9.1, pip install pyqt5)
@@ -19,7 +16,8 @@ pyimannotate is a Python-scripted Qt application tailored for hassle-free annota
 - E: enable drawing mode
 - M: moving mode
 - N: navigation mode
-- Y: delete selected shape
+- C: complete current annotation object
+- Del: delete selected shape
 - Ctrl+O: open an image
 - Ctrl+S: save your annotations
 - Ctrl+G: select pointing line color
@@ -38,4 +36,4 @@ Here is a picture of Duke University Cameron Stadium annotated:
 - https://github.com/tzutalin/labelImg
 - https://github.com/tn74/MTurkAnnotationTool
 
-Developed by Artem Streltsov of Duke Energy Initiative, Duke University
+Developed by Artem Streltsov of the Duke University Energy Initiative: https://energy.duke.edu/
