@@ -29,7 +29,11 @@ The examples folder contains a sample satellite image (of Duke University) and a
 Here is a picture of Duke University Cameron Stadium annotated:
 ![Cameron](https://github.com/astr93/pyimannotate/blob/master/examples/cameron%20example.JPG)
 
+### Utilities:
 
+- object_extractor.py parses .json outputs and creates .csv workbooks with coordinates and types of objects (now built into pyimannotate)
+
+- binarymask.py creates binary masks from .csv workbooks, saves matrices in numpy .npz format
 
 ### References (related tools that influenced development)
 - https://github.com/wkentaro/labelme
