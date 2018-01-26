@@ -111,8 +111,8 @@ class Shape(QGraphicsItem):
     select_line_color = QColor(255, 255, 255)
     vertex_fill_color = QColor(0, 255, 0, 255)
     hvertex_fill_color = QColor(255, 0, 0)
-    point_size = 2
-    hsize = 4.0
+    point_size = 1.5
+    hsize = 3.0
 
     def __init__(self, line_color=None, point_size=None, parent=None):
         super(Shape, self).__init__(parent)
@@ -218,7 +218,7 @@ CURSOR_GRAB    = Qt.OpenHandCursor
 class SubQGraphicsScene(QGraphicsScene):
     NAVIGATION, DRAWING, MOVING = 0, 1, 2
     POLYDRAWING, POLYREADY = 0, 1
-    epsilon=100.0
+    epsilon=30.0
     def __init__(self, parent=None):
         super(SubQGraphicsScene, self).__init__(parent)
         self.mode=self.NAVIGATION
@@ -476,7 +476,7 @@ class SubQGraphicsScene(QGraphicsScene):
 
 
 class QViewer(QGraphicsView):
-    epsilon=121.0
+
     def __init__(self, parent=None):
         super(QViewer, self).__init__(parent)
         self.scene = SubQGraphicsScene()
