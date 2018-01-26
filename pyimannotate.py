@@ -666,7 +666,7 @@ class MainWindow(QMainWindow):
                 self.lineColor = data['lineColor']
                 self.fillColor = data['fillColor']
                 self.shapestoload = data['objects']
-                self.object_types= data['types']
+                self.object_types= data['type']
 
         except:
             pass
