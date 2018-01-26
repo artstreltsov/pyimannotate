@@ -111,8 +111,8 @@ class Shape(QGraphicsItem):
     select_line_color = QColor(255, 255, 255)
     vertex_fill_color = QColor(0, 255, 0, 255)
     hvertex_fill_color = QColor(255, 0, 0)
-    point_size = 4
-    hsize=8.0
+    point_size = 2
+    hsize = 4.0
 
     def __init__(self, line_color=None, point_size=None, parent=None):
         super(Shape, self).__init__(parent)
