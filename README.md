@@ -31,9 +31,11 @@ Here is a picture of Duke University Cameron Stadium annotated:
 
 ### Utilities:
 
-- object_extractor.py parses .json outputs and creates .csv workbooks with coordinates and types of objects (now built into pyimannotate)
+- object_extractor.py parses .json outputs and creates .csv workbooks with coordinates and types of objects (now built into pyimannotate). *Tool for those more comfortable operating with .csv files rather then parsing .json files themselves*.
 
-- binarymask.py creates binary masks from .csv workbooks, saves matrices in numpy .npz format
+- binarymask.py creates binary masks from .csv workbooks, saves matrices in numpy .npz format. *Tool for researchers in machine learning able to create ground truth (i.e. labels) for binary image classification problems*.
+
+- imcropper.py crops the image on mouse click in rectangles with the cursor being the center of the rectangle and saves images of specified size (parameter IMSIZE) in the same folder as the original folder. *Tool for researchers in machine learning able to crop big images to process the areas of interest*.
 
 ### References (related tools that influenced development)
 - https://github.com/wkentaro/labelme
