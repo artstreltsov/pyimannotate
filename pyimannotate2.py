@@ -1,3 +1,36 @@
+"""
+Author: Artem Streltsov (artem.streltsov@duke.edu)
+Organization: Duke University Energy Initiative
+
+version: 2.0
+
+Description:
+pyimannotate is a Python-scripted Qt application tailored for hassle-free
+annotations of objects in images. Built on QGraphics architecture, it provides
+a smooth annotation experience to researchers aiming to mark locations of objects
+of interest. It supports input of all basic image formats (.png, .jpg, .bmp, .tif)
+or a label file in .json and outputs a .json file containing coordinates of
+objects, object types, respective label classes, image size and a compressed
+copy of the image in bytes (optinal, default=False, checkable in the 'File' tab),
+among others, plus a .csv workbook featuring the above.
+
+Hotkeys:
+E: enable drawing mode
+M: moving mode (move vertices, shapes)
+N: navigation mode (pan mode)
+C: complete current annotation object (if a non-closed shape is sought, i.e. line or point)
+Del: delete selected/highlighted shape
+Ctrl+O: open an image
+Ctrl+S: save your annotations
+Ctrl+G: select pointing line color
+Ctrl+H: select shape color for the active class
+Ctrl+Q: close the application
+I: Initialize (or edit the list of) labels
+L: Set line width of all objects (retrospectively)
+[: Set attraction epsilon (attracts cursor to shape's first point if epsilon close)
+]: Save original image bytes (check option)
+"""
+
 from functools import partial
 from base64 import b64encode, b64decode
 import json
@@ -899,6 +932,14 @@ class MainWindow(QMainWindow):
         [self.addbutton(self.toolbar, action) for action in [openshort, save, setEditing, setMoving, setNavigating, setClosed, initLabels, linecolorselect, shapecolorselect, quitaction]]
         self.addToolBar(Qt.LeftToolBarArea, self.toolbar)
 
+
+    def updateStatusBar(self):
+        if self.currentlabel is not None:
+            self.statusbar.showMessage('{} | {} | {}'.format('LOADED: '+self.imname, 'MODE: '+self.modedict[self.viewer.scene.mode], 'LABEL: '+ self.currentlabel))
+        else:
+            self.statusbar.showMessage('{} | {} | {}'.format('LOADED: '+self.imname, 'MODE: '+self.modedict[self.viewer.scene.mode], ''))
+        return
+
     def checkaction(self, checked=False):
         if checked:
             self.savebytes=True
@@ -920,7 +961,7 @@ class MainWindow(QMainWindow):
         index=self.labelListWidget.indexFromItem(item).row()
         self.viewer.scene.setLabelMode(index)
         self.currentlabel=item.text()
-        self.statusbar.showMessage('{} | {} | {}'.format('LOADED: '+self.imname, 'MODE: '+self.modedict[self.viewer.scene.mode], 'LABEL: '+ item.text()))
+        self.updateStatusBar()
         return
 
     def initLabels(self):
@@ -952,29 +993,20 @@ class MainWindow(QMainWindow):
 
     def setEditing(self):
         self.viewer.scene.mode=self.viewer.scene.DRAWING
-        if self.currentlabel is not None:
-            self.statusbar.showMessage('{} | {} | {}'.format('LOADED: '+self.imname, 'MODE: '+self.modedict[self.viewer.scene.mode], 'LABEL: '+ self.currentlabel))
-        else:
-            self.statusbar.showMessage('{} | {} | {}'.format('LOADED: '+self.imname, 'MODE: '+self.modedict[self.viewer.scene.mode], ''))
-          
+        self.viewer.scene.overrideCursor(CURSOR_DRAW)
+        self.updateStatusBar()
         return
 
     def setMoving(self):
         self.viewer.scene.mode=self.viewer.scene.MOVING
-        if self.currentlabel is not None:
-            self.statusbar.showMessage('{} | {} | {}'.format('LOADED:'+self.imname, 'MODE: '+self.modedict[self.viewer.scene.mode], 'LABEL: '+ self.currentlabel))
-        else:
-            self.statusbar.showMessage('{} | {} | {}'.format('LOADED:'+self.imname, 'MODE: '+self.modedict[self.viewer.scene.mode], ''))
-          
+        self.viewer.scene.overrideCursor(CURSOR_GRAB)
+        self.updateStatusBar()
         return
 
     def setNavigating(self):
         self.viewer.scene.mode=self.viewer.scene.NAVIGATION
-        if self.currentlabel is not None:
-            self.statusbar.showMessage('{} | {} | {}'.format('LOADED: '+self.imname, 'MODE: '+self.modedict[self.viewer.scene.mode], 'LABEL: '+ self.currentlabel))
-        else:
-            self.statusbar.showMessage('{} | {} | {}'.format('LOADED: '+self.imname, 'MODE: '+self.modedict[self.viewer.scene.mode], ''))
-          
+        self.viewer.scene.overrideCursor(CURSOR_GRAB)
+        self.updateStatusBar()
         return
 
     def imagenameDoubleClicked(self, item=None):
@@ -1078,11 +1110,8 @@ class MainWindow(QMainWindow):
             self.annotationscene.imagePath=self.imagePath
             self.annotationscene.imageData=self.imageData
             self.annotationscene.imsizes=self.imsizes
+            self.updateStatusBar()
 
-            if self.currentlabel is not None:
-                self.statusbar.showMessage('{} | {} | {}'.format('LOADED: '+self.imname, 'MODE: '+self.modedict[self.viewer.scene.mode], 'LABEL: '+ self.currentlabel))
-            else:
-                self.statusbar.showMessage('{} | {} | {}'.format('LOADED: '+self.imname, 'MODE: '+self.modedict[self.viewer.scene.mode], ''))
 
     def loadjson(self, filename, jsonfile=False):
         try:
@@ -1109,6 +1138,7 @@ class MainWindow(QMainWindow):
             self.imageData=None
             self.shapestoload=None
             self.object_types=None
+            self.viewer.scene.objtypes=[]
             [self.viewer.scene.removeItem(item) for item in self.viewer.scene.items()[:-1]]
             self.viewer.scene.polys=[]
             for labelclass in self.viewer.scene.labelclasses:
@@ -1134,9 +1164,14 @@ class MainWindow(QMainWindow):
             for ps in range(len(polygons)):
                 polygon=Shape()
                 polygon.points=[QPointF(p[0], p[1]) for p in polygons[ps]]
-                polygon.closed=True
+                
+                objtype=types[ps]
+                if objtype=='Polygon':
+                    polygon.closed=True
+                polygon.objtype=objtype
+                
                 self.viewer.scene.polys.append(polygon)
-                self.viewer.scene.objtypes.append(types[ps])
+                self.viewer.scene.objtypes.append(objtype)
                 self.viewer.scene.addItem(polygon)
                 labeldict[self.labels[ps]].assignObject(polygon)
 
@@ -1150,11 +1185,7 @@ class MainWindow(QMainWindow):
         self.annotationscene.savebytes=self.savebytes
         self.annotationscene.save()
         self.populateImageList()
-        if self.currentlabel is not None:
-            self.statusbar.showMessage('{} | {} | {}'.format('SAVED: '+self.imname, 'MODE: '+self.modedict[self.viewer.scene.mode], 'LABEL: '+ self.currentlabel))
-        else:
-            self.statusbar.showMessage('{} | {} | {}'.format('SAVED: '+self.imname, 'MODE: '+self.modedict[self.viewer.scene.mode], ''))
-
+        self.updateStatusBar()
 
 if __name__ == '__main__':
 
