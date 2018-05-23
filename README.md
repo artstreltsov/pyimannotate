@@ -1,10 +1,12 @@
 # pyimannotate
 
+pyimannotate2 is an enhanced version of pyimannotate
 
 ### What is this tool for?
-pyimannotate is a Python-scripted Qt application tailored for hassle-free annotations of objects in images. Built on QGraphics architecture, it provides a smooth annotation experience to researchers aiming to mark locations of objects of interest. It supports input of all basic image formats (.png, .jpg, .bmp, .tif) or an annotated image in .json and outputs a .json file containing coordinates of objects, image size and a compressed copy of the image in bytes, among others, plus a .csv workbook featuring object locations.  
+pyimannotate is a Python-scripted Qt application tailored for hassle-free annotations of objects in images. Built on QGraphics architecture, it provides a smooth annotation experience to researchers aiming to mark locations of objects of interest. It supports input of all basic image formats (.png, .jpg, .bmp, .tif) or a label file in .json and outputs a .json file containing coordinates of
+objects, object types, respective label classes, image size and a compressed copy of the image in bytes (optinal, default=False, checkable in the 'File' tab), among others, plus a .csv workbook featuring the above. 
 
- ** Note: Readme and the annotation tool itself are still under construction **
+** Note: Readme and the annotation tool itself are still under construction **
  
 ### Dependencies (Tested Version in Parenthesis):
 - Python 3.x (3.6)
@@ -14,15 +16,19 @@ pyimannotate is a Python-scripted Qt application tailored for hassle-free annota
 
 ### Hotkeys:
 - E: enable drawing mode
-- M: moving mode
-- N: navigation mode
-- C: complete current annotation object
-- Del: delete selected shape
+- M: moving mode (move vertices, shapes)
+- N: navigation mode (pan mode)
+- C: complete current annotation object (if a non-closed shape is sought, i.e. line or point)
+- Del: delete selected/highlighted shape
 - Ctrl+O: open an image
 - Ctrl+S: save your annotations
 - Ctrl+G: select pointing line color
-- Ctrl+H: select shape color
+- Ctrl+H: select shape color for the active class
 - Ctrl+Q: close the application
+- I: Initialize (or edit the list of) labels
+- L: Set line width of all objects (retrospectively)
+- [: Set attraction epsilon (attracts cursor to shape's first point if epsilon close)
+- ]: Save original image bytes (check option)
 
 The examples folder contains a sample satellite image (of Duke University) and an annotated .json output.
 
