@@ -1159,14 +1159,19 @@ class MainWindow(QMainWindow):
                 self.shapestoload = data['objects']
                 self.object_types = data['type']
                 self.labels = data['label']
-                self.imagePath = data['imagePath']
+                
                 
                 if jsonfile:
+                    self.imagePath = data['imagePath']
                     if 'imageData' in data:
-                        print('HERE')
                         self.imageData = b64decode(data['imageData'])
                     else:
                         self.imageData=process(self.imagePath, None)
+                        if self.imageData is None:
+                            self.imagePath = QFileDialog.getOpenFileName(self,
+   "Please select corresponding image", "Images")[0]
+                            self.imageData=process(self.imagePath, None)
+                    
         except:
             pass
 
@@ -1227,7 +1232,7 @@ class MainWindow(QMainWindow):
 if __name__ == '__main__':
 
     import sys
-    import ctypes
+    
     
     app = QApplication(sys.argv)
     app.setStyleSheet("QToolButton { background-color: gray; }\n"
@@ -1243,8 +1248,10 @@ if __name__ == '__main__':
     y = screenGeometry.height()
     window.setGeometry(QRect(x/10, y/10, x/1.2, y/1.2))
     
-    myappid = 'duke.pyimannotate.2'
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    if sys.platform=='win32':
+        import ctypes
+        myappid = 'duke.pyimannotate.2'
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
         
     window.show()
     sys.exit(app.exec_())
