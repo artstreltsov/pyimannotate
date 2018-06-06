@@ -363,10 +363,11 @@ class Annotationscene(object):
 
     def save(self):
 
-        self.imData = b64encode(self.imageData).decode('utf-8')
+        
         self.shapes=[[(point.x(), point.y()) for point in poly] for poly in self.polygons]
         self.shapes_to_pandas().to_csv(re.search(re.compile('(.+?)(\.[^.]*$|$)'), self.filename).group(1)+'.csv', sep=',')
         if self.savebytes:
+            self.imData = b64encode(self.imageData).decode('utf-8')
             try:
                 with open(self.filename, 'w') as f:
     
