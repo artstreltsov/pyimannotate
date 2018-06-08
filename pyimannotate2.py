@@ -2,7 +2,7 @@
 Author: Artem Streltsov (artem.streltsov@duke.edu)
 Organization: Duke University Energy Initiative
 
-version: 2.0
+version: 2.0.2
 
 Description:
 pyimannotate is a Python-scripted Qt application tailored for hassle-free
@@ -19,7 +19,9 @@ E: enable drawing mode
 M: moving mode (move vertices, shapes)
 N: navigation mode (pan mode)
 C: complete current annotation object (if a non-closed shape is sought, i.e. line or point)
+K: copy selected shape
 Del: delete selected/highlighted shape
+Ctrl+Z: undo last action (remove last added point)
 Ctrl+O: open an image
 Ctrl+S: save your annotations
 Ctrl+G: select pointing line color
@@ -40,7 +42,7 @@ import os
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
-
+import sys
 
 
 #Application icon bytes to load from
@@ -122,7 +124,7 @@ class PropertiesWindow(QDialog):
     '''A window that pops up on right click (see mousepressevent in qscene).
     Lets the user reassign an annotated ("closed") shape to a different label class.
     '''
-    def __init__(self, shape=None, all_labels=[None], parent=None):
+    def __init__(self, shape=None, all_labels=[None], scene=None, parent=None):
         super(PropertiesWindow, self).__init__(parent)
         self.shape=shape
         self.points = self.shape.points
@@ -131,7 +133,7 @@ class PropertiesWindow(QDialog):
         self.all_labels=all_labels
         self.setWindowTitle("Properties editor")
         self.label_names=[label.name for label in all_labels if label is not None]
-
+        
         self.form=QGridLayout(self)
         
         self.form.addWidget(QLabel("Object properties"), 0, 0)
@@ -147,13 +149,15 @@ class PropertiesWindow(QDialog):
         self.form.addWidget(self.qbox, 2, 1)
                 
         
+        button = QPushButton('Copy', self)
+        button.clicked.connect(scene.copySelected)
         self.buttonBox=QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, Qt.Horizontal)
+        self.buttonBox.addButton(button, QDialogButtonBox.AcceptRole)
         self.form.addWidget(self.buttonBox,3,0)
         self.buttonBox.accepted.connect(self.accept)
         self.buttonBox.rejected.connect(self.reject)
         self.accepted.connect(self.extractInputs)
-
-        
+            
     def extractInputs(self):
         oldlabel=self.shape.label
         newlabel=self.qbox.currentText()
@@ -163,10 +167,7 @@ class PropertiesWindow(QDialog):
                 newlabelclass=self.all_labels[self.label_names.index(newlabel)]
                 newlabelclass.assignObject(self.shape)
         return
-    
 
-
-    
     
 class LabelDialog(QDialog):
     '''Label editor form. Given # of new classes to initiate (nlabels) pops up
@@ -363,11 +364,11 @@ class Annotationscene(object):
 
     def save(self):
 
-        
         self.shapes=[[(point.x(), point.y()) for point in poly] for poly in self.polygons]
         self.shapes_to_pandas().to_csv(re.search(re.compile('(.+?)(\.[^.]*$|$)'), self.filename).group(1)+'.csv', sep=',')
         if self.savebytes:
             self.imData = b64encode(self.imageData).decode('utf-8')
+        
             try:
                 with open(self.filename, 'w') as f:
     
@@ -556,8 +557,30 @@ class SubQGraphicsScene(QGraphicsScene):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Delete:
             self.deleteSelected()
+        if event.key() == Qt.Key_K:
+            self.copySelected()
+        if (event.key() == Qt.Key_Z) and (QApplication.keyboardModifiers() == Qt.ControlModifier):
+        	self.undoAction()
 
-            
+    
+
+    def undoAction(self):
+        if self.QGitem:
+        	if len(self.QGitem.points) > 1:
+        		self.QGitem.popPoint()
+        		self.line.points[0]=self.QGitem.points[-1]
+        		self.update()
+        	else:
+	            self.removeItem(self.QGitem)
+	            if self.line:
+	            	if self.line in self.items():
+	                	self.removeItem(self.line)
+	                
+	            	self.line.popPoint()
+	            self.polystatus=self.POLYREADY
+	            self.QGitem = None
+	            self.update()
+
     def refreshShapestoLabels(self, labelclass):
         labelpolygons=labelclass.polygons
         labelclass.polygons=[]
@@ -577,7 +600,6 @@ class SubQGraphicsScene(QGraphicsScene):
         active_labelclass=self.labelclasses[self.labelmode]
         active_labelclass.fillColor=self.shapeColor
         self.refreshShapestoLabels(labelclass=active_labelclass)
-
         return
 
     def setLabelMode(self, classindex):
@@ -612,7 +634,7 @@ class SubQGraphicsScene(QGraphicsScene):
                 all_labels=[None]
                 if len(self.labelclasses) > 0:
                     all_labels=self.labelclasses
-                propdialog=PropertiesWindow(shape=self.selectedShape, all_labels=all_labels)
+                propdialog=PropertiesWindow(shape=self.selectedShape, all_labels=all_labels, scene=self)
                 propdialog.move(event.screenPos())
                 propdialog.exec()
 
@@ -696,7 +718,10 @@ class SubQGraphicsScene(QGraphicsScene):
         if self.moving and Qt.LeftButton & event.buttons():
             self.overrideCursor(CURSOR_GRAB)
             if self.vertexSelected():
-                self.moveVertex(pos)
+                if (self.selectedShape.objtype=='Line') and (QApplication.keyboardModifiers() == Qt.ShiftModifier):
+                    self.moveShape(self.selectedShape, pos)
+                else:
+                    self.moveVertex(pos)
                 self.update()
             elif self.selectedShape and self.prevPoint:
                 self.moveShape(self.selectedShape, pos)
@@ -770,17 +795,51 @@ class SubQGraphicsScene(QGraphicsScene):
         self._cursor = cursor
         QApplication.setOverrideCursor(cursor) 
 
+    def copySelected(self):
+
+        if self.selectedShape:
+            shape = self.selectedShape
+            c,o,s =[shape.closed, shape.objtype, shape.point_size]
+            p=[point for point in shape.points]
+            
+            newshape=Shape()
+            
+            newshape.points, newshape.closed, newshape.objtype, newshape.point_size = p, c, o, s
+
+            self.polys.append(newshape)
+            self.objtypes.append(newshape.objtype)
+            
+            newshape.setZValue(len(self.polys)+1)
+            self.addItem(newshape)
+            
+            labelid=[label.name for label in self.labelclasses].index(shape.label)
+            self.labelclasses[labelid].assignObject(newshape)
+
+            print('Shape copied')
+            self.clearShapeSelections()
+            self.selectShape(newshape)
+            self.update()
+            return
+
+
     def deleteSelected(self):
         if self.selectedShape:
             shape = self.items()[:-1][::-1].index(self.selectedShape)
-            self.polys.pop(shape)
-            self.objtypes.pop(shape)
+            if self.selectedShape in self.polys:
+                self.polys.pop(shape)
+                self.objtypes.pop(shape)
             self.removeItem(self.selectedShape)
+            if self.line:
+                self.removeItem(self.line)
+                self.line.popPoint()
             labelind=self.findShapeInLabel(self.selectedShape)
             if len(labelind) > 0:
                 label, shapeind = labelind[0]
                 self.labelclasses[label].polygons.pop(shapeind)
+            self.polystatus=self.POLYREADY
             self.selectedShape = None
+            self.QGitem = None
+            self.clearShapeSelections()
             print('Shape deleted')
             self.update()
             return
@@ -806,6 +865,7 @@ class SubQGraphicsScene(QGraphicsScene):
             return
 
         itemUnderMouse=self.itemAt(point, QTransform())
+
         if itemUnderMouse in self.items()[:-1]:
             self.selectShape(itemUnderMouse)
             return
@@ -941,6 +1001,8 @@ class MainWindow(QMainWindow):
         setwidth = action('&Set line width', self.openLineWidthSlider, 'L', 'Line width set', 'Set line width')
         setepsilon = action('&Set attraction epsilon', self.openEpsilonSlider, '[', 'Epsilon set', 'Set epsilon')
         saveoriginal = QAction('&Save original image bytes', self, checkable=True, shortcut="]", triggered=self.checkaction)
+        #copySelected = action('&Copy', self.copySelected, 'K', 'Copy', 'Copy')
+        
         
         menubar = self.menuBar()
         fileMenu = menubar.addMenu('File')
@@ -1053,6 +1115,8 @@ class MainWindow(QMainWindow):
     def saver(self):
         dialogue=QFileDialog()
         dialogue.setLabelText(QFileDialog.Accept, "Save")
+        if sys.platform=='darwin':
+            dialogue.setOption(QFileDialog.DontUseNativeDialog)
         dialogue.setNameFilter("*.json")
         dialogue.setDefaultSuffix('json')
         dialogue.selectFile(self.imname)
@@ -1119,7 +1183,10 @@ class MainWindow(QMainWindow):
     def handleOpen(self, path=None):
         self.resetState()
         if not path:
-            path = QFileDialog.getOpenFileName(
+            dialog=QFileDialog()
+            if sys.platform=='darwin':
+                dialog.setOption(QFileDialog.DontUseNativeDialog)
+            path = dialog.getOpenFileName(
                 self, 'Choose Image')[0]
         
         if path:
@@ -1135,7 +1202,10 @@ class MainWindow(QMainWindow):
                 self.imageData = process(path, None)
                 dialog=QMessageBox.question(self, "Label file?", 'Do you have a label file for this image?', QMessageBox.Yes|QMessageBox.No)
                 if dialog == QMessageBox.Yes:
-                    labelfilepath = QFileDialog.getOpenFileName(self,
+                    dialog=QFileDialog()
+                    if sys.platform=='darwin':
+                        dialog.setOption(QFileDialog.DontUseNativeDialog)
+                    labelfilepath = dialog.getOpenFileName(self,
    "Select label file", path, "Label Files (*.json)")[0]
                     self.loadjson(labelfilepath)
             
@@ -1232,9 +1302,6 @@ class MainWindow(QMainWindow):
 
 if __name__ == '__main__':
 
-    import sys
-    
-    
     app = QApplication(sys.argv)
     app.setStyleSheet("QToolButton { background-color: gray; }\n"
               "QToolButton:pressed { background-color: green; }\n"
@@ -1248,7 +1315,7 @@ if __name__ == '__main__':
     x = screenGeometry.width()
     y = screenGeometry.height()
     window.setGeometry(QRect(x/10, y/10, x/1.2, y/1.2))
-    
+
     if sys.platform=='win32':
         import ctypes
         myappid = 'duke.pyimannotate.2'
