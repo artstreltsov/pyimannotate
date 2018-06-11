@@ -2,7 +2,7 @@
 Author: Artem Streltsov (artem.streltsov@duke.edu)
 Organization: Duke University Energy Initiative
 
-version: 2.0.2
+version: 2.0.3
 
 Description:
 pyimannotate is a Python-scripted Qt application tailored for hassle-free
@@ -133,7 +133,8 @@ class PropertiesWindow(QDialog):
         self.all_labels=all_labels
         self.setWindowTitle("Properties editor")
         self.label_names=[label.name for label in all_labels if label is not None]
-        
+        self.editable_status=self.shape.editable
+
         self.form=QGridLayout(self)
         
         self.form.addWidget(QLabel("Object properties"), 0, 0)
@@ -149,16 +150,45 @@ class PropertiesWindow(QDialog):
         self.form.addWidget(self.qbox, 2, 1)
                 
         
-        button = QPushButton('Copy', self)
-        button.clicked.connect(scene.copySelected)
+        copybutton = QPushButton('Copy', self)
+        copybutton.clicked.connect(scene.copySelected)
+
+        self.editbutton = QPushButton('Set editable', self)
+        self.editbutton.setCheckable(True)
+        self.editbutton.clicked.connect(self.updateCheckable)
+        self.editableColor()
+
         self.buttonBox=QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, Qt.Horizontal)
-        self.buttonBox.addButton(button, QDialogButtonBox.AcceptRole)
+        self.buttonBox.addButton(copybutton, QDialogButtonBox.AcceptRole)
+        self.buttonBox.addButton(self.editbutton, QDialogButtonBox.ActionRole)
         self.form.addWidget(self.buttonBox,3,0)
         self.buttonBox.accepted.connect(self.accept)
         self.buttonBox.rejected.connect(self.reject)
         self.accepted.connect(self.extractInputs)
-            
+    
+    def editableColor(self):
+    	if self.editable_status:
+    		color=QColor(255,0,0)
+    	else:
+    		color=QColor(255,255,255)
+        
+    	palette = self.editbutton.palette()
+    	role = self.editbutton.backgroundRole()
+    	palette.setColor(role, color)
+    	self.editbutton.setPalette(palette)
+    	self.editbutton.setAutoFillBackground(True)
+    	return
+
+    def updateCheckable(self, checked=False):
+    	if checked and not self.shape.editable:
+    		self.editable_status=True
+    	else:
+    		self.editable_status=False
+    	self.editableColor()
+    	return
+
     def extractInputs(self):
+        self.shape.editable=self.editable_status
         oldlabel=self.shape.label
         newlabel=self.qbox.currentText()
         if oldlabel != newlabel:
@@ -421,6 +451,7 @@ class Shape(QGraphicsItem):
         self.points_adjusted=None
         self.objtype=None
         self.label=None
+        self.editable=False
         
         if line_color is not None:
             self.line_color = line_color
@@ -629,7 +660,7 @@ class SubQGraphicsScene(QGraphicsScene):
         '''Draw, move vertices/shapes, open properties window'''
         pos = event.scenePos()
 
-        if (event.button() == Qt.RightButton):
+        if (event.button() == Qt.RightButton) and not self.drawing():
             if self.selectedShape:
                 all_labels=[None]
                 if len(self.labelclasses) > 0:
@@ -637,6 +668,23 @@ class SubQGraphicsScene(QGraphicsScene):
                 propdialog=PropertiesWindow(shape=self.selectedShape, all_labels=all_labels, scene=self)
                 propdialog.move(event.screenPos())
                 propdialog.exec()
+                
+                if self.selectedShape.editable:
+                    self.selectedShape.closed=False
+                    self.QGitem=self.selectedShape
+                    p=self.QGitem.points[-1]
+                    self.line=Shape(point_size=self.point_size)
+                    self.addItem(self.line)
+                    self.line.setPos(p)
+                    self.line.addPoint(p)
+                    self.polystatus = self.POLYDRAWING
+                    self.mode = self.DRAWING
+                    shapeid = self.polys.index(self.selectedShape)
+                if self.selectedShape in self.polys:
+                        self.polys.pop(shapeid)
+                        self.objtypes.pop(shapeid)
+                        self.QGitem.setZValue(len(self.polys)+2)
+                self.update()
 
         if self.drawing() & (event.button() == Qt.LeftButton):
             self.overrideCursor(CURSOR_DRAW)
@@ -721,13 +769,12 @@ class SubQGraphicsScene(QGraphicsScene):
                 if (self.selectedShape.objtype=='Line') and (QApplication.keyboardModifiers() == Qt.ShiftModifier):
                     self.moveShape(self.selectedShape, pos)
                 else:
-                    self.moveVertex(pos)
+                	self.moveVertex(pos)
                 self.update()
             elif self.selectedShape and self.prevPoint:
                 self.moveShape(self.selectedShape, pos)
                 self.update()
             return
-
 
         #update selections/highlights based on cursor location
 
@@ -736,7 +783,7 @@ class SubQGraphicsScene(QGraphicsScene):
         id_shape=[i for i, y in enumerate(id_point) if y != []]
 
         itemUnderMouse=self.itemAt(pos, QTransform())
-        
+
         #if shape/vertex combination found, highlight vertex and shape
         if id_shape != []:
             self.selectedVertex=id_point[id_shape[0]][0]
@@ -782,6 +829,7 @@ class SubQGraphicsScene(QGraphicsScene):
             if self.line:
                 self.removeItem(self.line)
                 self.line.popPoint()
+            self.QGitem.editable=False
             self.polys.append(self.QGitem)
             if self.labelmode is not None:
                 labelobject=self.labelclasses[self.labelmode]
@@ -830,8 +878,9 @@ class SubQGraphicsScene(QGraphicsScene):
                 self.objtypes.pop(shape)
             self.removeItem(self.selectedShape)
             if self.line:
-                self.removeItem(self.line)
-                self.line.popPoint()
+            	if self.line in self.items():
+            		self.removeItem(self.line)
+            	self.line.popPoint()
             labelind=self.findShapeInLabel(self.selectedShape)
             if len(labelind) > 0:
                 label, shapeind = labelind[0]
@@ -1001,7 +1050,6 @@ class MainWindow(QMainWindow):
         setwidth = action('&Set line width', self.openLineWidthSlider, 'L', 'Line width set', 'Set line width')
         setepsilon = action('&Set attraction epsilon', self.openEpsilonSlider, '[', 'Epsilon set', 'Set epsilon')
         saveoriginal = QAction('&Save original image bytes', self, checkable=True, shortcut="]", triggered=self.checkaction)
-        #copySelected = action('&Copy', self.copySelected, 'K', 'Copy', 'Copy')
         
         
         menubar = self.menuBar()
