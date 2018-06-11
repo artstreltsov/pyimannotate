@@ -2,7 +2,7 @@
 Author: Artem Streltsov (artem.streltsov@duke.edu)
 Organization: Duke University Energy Initiative
 
-version: 2.0.3
+version: 2.0.3.1
 
 Description:
 pyimannotate is a Python-scripted Qt application tailored for hassle-free
@@ -680,7 +680,7 @@ class SubQGraphicsScene(QGraphicsScene):
                     self.polystatus = self.POLYDRAWING
                     self.mode = self.DRAWING
                     shapeid = self.polys.index(self.selectedShape)
-                if self.selectedShape in self.polys:
+                    if self.selectedShape in self.polys:
                         self.polys.pop(shapeid)
                         self.objtypes.pop(shapeid)
                         self.QGitem.setZValue(len(self.polys)+2)
