@@ -2,6 +2,11 @@
 
 pyimannotate2 is an enhanced version of pyimannotate
 
+
+# Overview of features
+[![Features overview](https://img.youtube.com/vi/NQseDcw70Wk/0.jpg)](https://www.youtube.com/watch?v=NQseDcw70Wk "Features overview")
+
+
 ### What is this tool for?
 pyimannotate is a Python-scripted Qt application tailored for hassle-free annotations of objects in images. Built on QGraphics architecture, it provides a smooth annotation experience to researchers aiming to mark locations of objects of interest. It supports input of all basic image formats (.png, .jpg, .bmp, .tif) or a label file in .json and outputs a .json file containing coordinates of
 objects, object types, respective label classes, image size and a compressed copy of the image in bytes (optinal, default=False, checkable in the 'File' tab), among others, plus a .csv workbook featuring the above. 
