@@ -2,7 +2,7 @@
 Author: Artem Streltsov (artem.streltsov@duke.edu)
 Organization: Duke University Energy Initiative
 
-version: 2.0.6
+version: 2.0.7
 
 Description:
 pyimannotate is a Python-scripted Qt application tailored for hassle-free
@@ -693,6 +693,7 @@ class SubQGraphicsScene(QGraphicsScene):
             self.overrideCursor(CURSOR_DRAW)
             #update the tail of the pointing line
             if self.line and self.polygon_not_finished():
+                self.line.prepareGeometryChange()
                 self.line.points[0]=pos
                 self.line.setPos(pos)
             #initialize a pointing line for a new polygon
@@ -704,6 +705,7 @@ class SubQGraphicsScene(QGraphicsScene):
 
             if self.QGitem:
                 #attract the cursor to the start point of the polygon and close it
+                self.QGitem.prepareGeometryChange()
                 if len(self.QGitem.points) > 1 and self.closeEnough(pos, self.QGitem.points[0]):
 
                     pos = self.QGitem.points[0]
@@ -746,7 +748,6 @@ class SubQGraphicsScene(QGraphicsScene):
             self.overrideCursor(CURSOR_DRAW)
 
             if self.QGitem:
-
                 if len(self.QGitem.points)==1:  #initialize the pointing line collapsed to a point
                     self.line.points=[self.QGitem.points[0], self.QGitem.points[0]]
                 colorLine = self.lineColor
@@ -769,12 +770,14 @@ class SubQGraphicsScene(QGraphicsScene):
         if self.moving and Qt.LeftButton & event.buttons():
             self.overrideCursor(CURSOR_GRAB)
             if self.vertexSelected():
+                self.selectedShape.prepareGeometryChange()
                 if (self.selectedShape.objtype=='Line') and (QApplication.keyboardModifiers() == Qt.ShiftModifier):
                     self.moveShape(self.selectedShape, pos)
                 else:
                 	self.moveVertex(pos)
                 self.update()
             elif self.selectedShape and self.prevPoint:
+                self.selectedShape.prepareGeometryChange()
                 self.moveShape(self.selectedShape, pos)
                 self.update()
             return
@@ -935,12 +938,14 @@ class SubQGraphicsScene(QGraphicsScene):
     	return
 
     def moveVertex(self, pos):
+        self.selectedShape.prepareGeometryChange()
         self.selectedShape.moveBy(self.selectedVertex, pos - self.selectedShape[self.selectedVertex])
 
 
     def moveShape(self, shape, pos):
         delta = pos - self.prevPoint
         if delta:
+            shape.prepareGeometryChange()
             shape.moveBy('all', delta)
             self.prevPoint = pos
             self.update()
@@ -1012,7 +1017,7 @@ class MainWindow(QMainWindow):
         self.savebytes=False
         self.autosave=False
         self.timer=None
-        self.autosavetime=5*60.0
+        self.autosavetime=2*60.0
         self.autosaveSignal.connect(self.defaultSave, Qt.QueuedConnection)
         
         self.currentlabel=None
@@ -1142,7 +1147,7 @@ class MainWindow(QMainWindow):
 
     def initLabels(self):
         text, okPressed = QInputDialog.getText(self, "Initialize labels", "How many NEW labels to create (type 0 to edit existing list)?", QLineEdit.Normal, "")
-        if okPressed and text != '':
+        if okPressed and text.isdigit():
             dialog=LabelDialog(nlabels=int(text), prelabels=self.viewer.scene.labelclasses)
             dialog.exec()
             self.labelnames=dialog.names
