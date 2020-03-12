@@ -54,3 +54,7 @@ Here is a picture of Duke University Cameron Stadium annotated:
 - https://github.com/tn74/MTurkAnnotationTool
 
 Developed by Artem Streltsov of the Duke University Energy Initiative: https://energy.duke.edu/
+
+Suggested citation: Artem Streltsov, Pyimannotate, (2018), GitHub repository, https://github.com/astr93/pyimannotate
+
+[LICENSE](https://creativecommons.org/licenses/by/4.0/legalcode)
